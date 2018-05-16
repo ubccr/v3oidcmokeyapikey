@@ -1,5 +1,3 @@
-import base64
-import re
 from urlparse import urlparse, parse_qs
 from keystoneauth1.identity.v3 import oidc
 from keystoneauth1 import exceptions
