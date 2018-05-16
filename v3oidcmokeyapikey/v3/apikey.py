@@ -14,15 +14,35 @@ class OidcMokeyAPIKeyException(exceptions.auth_plugins.AuthPluginException):
 class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
     """Implementation for OpenID Connect Authorization Code using Mokey API Key."""
 
-    def __init__(self, auth_url, identity_provider, protocol, client_id, api_key, discovery_endpoint, redirect_uri,  **kwargs):
-        """Class constructor"""
+    def __init__(self, auth_url, identity_provider, protocol,
+                 client_id, api_key, discovery_endpoint,
+                 redirect_uri,  **kwargs):
+        """The Mokey API Key plugin expects the following.
 
-	super(OidcMokeyAPIKey, self).__init__(auth_url, identity_provider, protocol, client_id, client_secret=None, access_token_endpoint=None, discovery_endpoint=discovery_endpoint, access_token_type='id_token', redirect_uri=redirect_uri, code=None, **kwargs)
+        :param redirect_uri: OpenID Connect Client Redirect URL
+        :type redirect_uri: string
 
+        :param api_key: Mokey API Key
+        :type api_key: string
+
+        :param discovery_endpoint: OpenID Connect Discovery Document URL
+        :type discovery_endpoint: string
+
+        """
+
+	super(OidcMokeyAPIKey, self).__init__(
+            auth_url, identity_provider, protocol, client_id,
+            client_secret=None,
+            access_token_endpoint=None,
+            discovery_endpoint=discovery_endpoint,
+            access_token_type='id_token',
+            redirect_uri=redirect_uri,
+            code=None,
+            **kwargs)
         self.api_key = api_key
 
     def get_payload(self, session):
-        """Get an authorization grant for the "authorization_code" grant type using Mokey APIKey.
+        """Get an authorization grant for the "authorization_code" grant type using Mokey API Key.
 
         :param session: a session object to send out HTTP requests.
         :type session: keystoneauth1.session.Session
@@ -31,20 +51,18 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         :rtype: dict
         """
 
-        discovery = self._get_discovery_document(session)
-        auth_endpoint = discovery.get("authorization_endpoint")
-        if auth_endpoint is None:
-            raise OidcMokeyAPIKeyException("Failed to find auth endpoint from discovery document")
-
-        code = self._get_auth_code(session, auth_endpoint)
-
+        code = self._get_auth_code(session)
         payload = {'redirect_uri': self.redirect_uri, 'code': code}
 
         return payload
 
-
-    def _get_auth_code(self, session, auth_endpoint, verify=True):
+    def _get_auth_code(self, session):
         """Exchange a Mokey API key for an Authorization Code"""
+
+        discovery = self._get_discovery_document(session)
+        auth_endpoint = discovery.get("authorization_endpoint")
+        if auth_endpoint is None:
+            raise OidcMokeyAPIKeyException("Failed to find auth endpoint from discovery document")
 
         state = sha256(str(random())).hexdigest()
 
@@ -57,7 +75,7 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         }
 
         resp = session.get(auth_endpoint,
-            params=params, authenticated=False, verify=verify, redirect=False)
+            params=params, authenticated=False, redirect=False)
 
         if resp.status_code != 302 or len(resp.headers['Location']) <= 0:
             raise OidcMokeyAPIKeyException("Failed to find redirect url for consent")
@@ -74,7 +92,7 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         headers = {'Authorization': 'Bearer ' + self.api_key, 'Accept': 'application/json'}
 
         resp = session.get(consent_url, headers=headers,
-           authenticated=False, verify=verify, redirect=False)
+           authenticated=False, redirect=False)
 
         if resp.status_code != 200:
             raise OidcMokeyAPIKeyException('Failed to GET consent url. Status code %s' % resp.status_code)
@@ -95,7 +113,7 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         }
 
         resp = session.post(consent_url, data=payload,
-            headers=headers, authenticated=False, verify=verify, redirect=1)
+            headers=headers, authenticated=False, redirect=1)
 
         if resp.status_code != 302 or len(resp.headers['Location']) <= 0:
             raise OidcMokeyAPIKeyException("Failed complete oauth2 consent flow")
