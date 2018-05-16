@@ -73,6 +73,7 @@ export OS_PROJECT_DOMAIN_NAME="mydomain"
 export OS_INTERFACE=public
 export OS_REGION_NAME="myregion"
 
+# v3oidcmokeyapikey specific options
 export OS_API_KEY="my_very_long_mokey_api_key"
 
 # Cache a keystone token for all future commands
