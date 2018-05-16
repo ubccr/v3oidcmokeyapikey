@@ -57,7 +57,7 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
 
         :param session: a session object to send out HTTP requests.
         :type session: keystoneauth1.session.Session
-:returns: a python dictionary containing the payload to be exchanged
+        :returns: a python dictionary containing the payload to be exchanged
         :rtype: dict
         """
 
