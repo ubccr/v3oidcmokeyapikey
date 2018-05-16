@@ -17,14 +17,27 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
                  redirect_uri,  **kwargs):
         """The Mokey API Key plugin expects the following.
 
-        :param redirect_uri: OpenID Connect Client Redirect URL
-        :type redirect_uri: string
-
         :param api_key: Mokey API Key
         :type api_key: string
 
+        :param redirect_uri: OpenID Connect Client Redirect URL
+        :type redirect_uri: string
+
         :param discovery_endpoint: OpenID Connect Discovery Document URL
         :type discovery_endpoint: string
+
+        :param auth_url: URL of the Identity Service
+        :type auth_url: string
+
+        :param identity_provider: Name of the Identity Provider the client
+                                  will authenticate against
+        :type identity_provider: string
+
+        :param client_id: OAuth 2.0 Client ID
+        :type client_id: string
+
+        :param protocol: Protocol name as configured in keystone
+        :type protocol: string
 
         """
 
@@ -44,8 +57,7 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
 
         :param session: a session object to send out HTTP requests.
         :type session: keystoneauth1.session.Session
-
-        :returns: a python dictionary containing the payload to be exchanged
+:returns: a python dictionary containing the payload to be exchanged
         :rtype: dict
         """
 
