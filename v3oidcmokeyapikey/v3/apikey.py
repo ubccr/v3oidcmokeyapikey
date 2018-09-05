@@ -81,7 +81,6 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
                            'password': self.password, 'scope': self.scope}
         :type payload: dict
         """
-        client_auth = (self.client_id, self.client_secret)
         access_token_endpoint = self._get_access_token_endpoint(session)
 
         # Don't use any auth, this is a public client
