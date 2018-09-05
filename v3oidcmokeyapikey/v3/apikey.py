@@ -66,9 +66,29 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         """
 
         code = self._get_auth_code(session)
-        payload = {'redirect_uri': self.redirect_uri, 'code': code}
+        payload = {'redirect_uri': self.redirect_uri, 'code': code, 'client_id': self.client_id}
 
         return payload
+
+    def _get_access_token(self, session, payload):
+        """Exchange an authorization code for an access token.
+           Overrides: keystoneauth1/identity/v3/oidc.py
+        :param session: a session object to send out HTTP requests.
+        :type session: keystoneauth1.session.Session
+        :param payload: a dict containing various OpenID Connect values, for
+                        example::
+                          {'grant_type': 'password', 'username': self.username,
+                           'password': self.password, 'scope': self.scope}
+        :type payload: dict
+        """
+        client_auth = (self.client_id, self.client_secret)
+        access_token_endpoint = self._get_access_token_endpoint(session)
+
+        # Don't use any auth, this is a public client
+        op_response = session.post(access_token_endpoint, data=payload, authenticated=False)
+
+        access_token = op_response.json()[self.access_token_type]
+        return access_token
 
     def _get_auth_code(self, session):
         """Exchange a Mokey API key for an Authorization Code"""
