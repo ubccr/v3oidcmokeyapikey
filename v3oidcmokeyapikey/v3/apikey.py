@@ -1,8 +1,12 @@
-from urlparse import urlparse, parse_qs
 from keystoneauth1.identity.v3 import oidc
 from keystoneauth1 import exceptions
 from random import random
 from hashlib import sha256
+
+try:
+    from urllib.parse import urlparse, parse_qs
+except ImportError:
+    from urlparse import urlparse, parse_qs
 
 class OidcMokeyAPIKeyException(exceptions.auth_plugins.AuthPluginException):
     def __init__(self, errmsg):
@@ -41,7 +45,7 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
 
         """
 
-	super(OidcMokeyAPIKey, self).__init__(
+        super(OidcMokeyAPIKey, self).__init__(
             auth_url, identity_provider, protocol, client_id,
             client_secret=None,
             access_token_endpoint=None,
@@ -62,9 +66,28 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         """
 
         code = self._get_auth_code(session)
-        payload = {'redirect_uri': self.redirect_uri, 'code': code}
+        payload = {'redirect_uri': self.redirect_uri, 'code': code, 'client_id': self.client_id}
 
         return payload
+
+    def _get_access_token(self, session, payload):
+        """Exchange an authorization code for an access token.
+           Overrides: keystoneauth1/identity/v3/oidc.py
+        :param session: a session object to send out HTTP requests.
+        :type session: keystoneauth1.session.Session
+        :param payload: a dict containing various OpenID Connect values, for
+                        example::
+                          {'grant_type': 'password', 'username': self.username,
+                           'password': self.password, 'scope': self.scope}
+        :type payload: dict
+        """
+        access_token_endpoint = self._get_access_token_endpoint(session)
+
+        # Don't use any auth, this is a public client
+        op_response = session.post(access_token_endpoint, data=payload, authenticated=False)
+
+        access_token = op_response.json()[self.access_token_type]
+        return access_token
 
     def _get_auth_code(self, session):
         """Exchange a Mokey API key for an Authorization Code"""
@@ -74,7 +97,7 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         if auth_endpoint is None:
             raise OidcMokeyAPIKeyException("Failed to find auth endpoint from discovery document")
 
-        state = sha256(str(random())).hexdigest()
+        state = sha256(str(random()).encode('utf-8')).hexdigest()
 
         params = {
             'client_id': self.client_id,
@@ -90,10 +113,10 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
         if resp.status_code != 302 or len(resp.headers['Location']) <= 0:
             raise OidcMokeyAPIKeyException("Failed to find redirect url for consent")
 
-        consent_url = resp.headers['Location']
+        login_url = resp.headers['Location']
 
-        if consent_url.startswith(self.redirect_uri):
-            qp = parse_qs(urlparse(consent_url).query, keep_blank_values=True)
+        if login_url.startswith(self.redirect_uri):
+            qp = parse_qs(urlparse(login_url).query, keep_blank_values=True)
             if 'error_description' in qp:
                 raise OidcMokeyAPIKeyException(qp['error_description'][0])
 
@@ -101,39 +124,70 @@ class OidcMokeyAPIKey(oidc.OidcAuthorizationCode):
 
         headers = {'Authorization': 'Bearer ' + self.api_key, 'Accept': 'application/json'}
 
-        resp = session.get(consent_url, headers=headers,
+        resp = session.get(login_url, headers=headers,
            authenticated=False, redirect=False)
 
         if resp.status_code != 200:
-            raise OidcMokeyAPIKeyException('Failed to GET consent url. Status code %s' % resp.status_code)
+            raise OidcMokeyAPIKeyException('Failed to GET login url. Status code %s' % resp.status_code)
 
-        consent_params = resp.json()
+        login_params = resp.json()
 
-        if 'challenge' not in consent_params:
+        if 'challenge' not in login_params:
             raise OidcMokeyAPIKeyException('Missing challenge')
-        if 'scopes' not in consent_params:
+        if 'scopes' not in login_params:
             raise OidcMokeyAPIKeyException('Missing scopes')
-        if 'auth_tok' not in consent_params:
+        if 'csrf' not in login_params:
             raise OidcMokeyAPIKeyException('Missing csrf token')
 
         payload = {
-            'challenge': consent_params['challenge'],
-            'scope': consent_params['scopes'],
-            'auth_tok': consent_params['auth_tok'],
+            'challenge': login_params['challenge'],
+            'scope': login_params['scopes'],
+            'csrf': login_params['csrf'],
         }
 
-        resp = session.post(consent_url, data=payload,
+        resp = session.post(login_url, data=payload,
             headers=headers, authenticated=False, redirect=1)
 
         if resp.status_code != 302 or len(resp.headers['Location']) <= 0:
-            raise OidcMokeyAPIKeyException("Failed complete oauth2 consent flow")
+            raise OidcMokeyAPIKeyException("Failed to find consent url")
 
 
         consent_url = resp.headers['Location']
 
+        resp = session.get(consent_url, headers=headers,
+           authenticated=False, redirect=1)
+
+        if resp.status_code != 200 and resp.status_code != 302:
+            raise OidcMokeyAPIKeyException('Failed to GET consent url. Status code %s' % resp.status_code)
+
+        if resp.status_code == 302:
+            consent_url = resp.headers['Location']
+        elif resp.status_code == 200:
+            consent_params = resp.json()
+
+            if 'challenge' not in consent_params:
+                raise OidcMokeyAPIKeyException('Missing challenge')
+            if 'scopes' not in consent_params:
+                raise OidcMokeyAPIKeyException('Missing scopes')
+            if 'csrf' not in consent_params:
+                raise OidcMokeyAPIKeyException('Missing csrf token')
+
+            payload = {
+                'challenge': consent_params['challenge'],
+                'scope': consent_params['scopes'],
+                'csrf': consent_params['csrf'],
+            }
+
+            resp = session.post(consent_url, data=payload,
+                headers=headers, authenticated=False, redirect=1)
+
+            if resp.status_code != 302 or len(resp.headers['Location']) <= 0:
+                raise OidcMokeyAPIKeyException("Failed complete oauth2 consent flow")
+
+            consent_url = resp.headers['Location']
+
         if not consent_url.startswith(self.redirect_uri):
             raise OidcMokeyAPIKeyException("Invalid redirect uri: %s" % consent_url)
-
 
         qp = parse_qs(urlparse(consent_url).query, keep_blank_values=True)
         if 'error_description' in qp:
